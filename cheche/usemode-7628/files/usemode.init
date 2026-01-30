@@ -1,0 +1,28 @@
+#!/bin/sh /etc/rc.common
+
+START=15
+USE_PROCD=1
+
+start_service() {
+    config_load usemode
+    config_get_bool enabled config enabled 1
+    config_get_bool debug config debug 0
+
+    [ "$enabled" = "0" ] && return 0
+
+    # 设置单网口IoT设备模式
+    if ! /usr/bin/usemode --iot-mode; then
+        logger -t usemode -p err "Failed to set IoT device mode"
+        return 1
+    fi
+    
+    # 首次启动时，自动配置为单网口WAN DHCP模式
+    if [ ! -f /etc/.network_configured ]; then
+        logger -t usemode "首次启动，配置单网口WAN DHCP模式"
+        if /usr/sbin/ethmode dhcpwan; then
+            touch /etc/.network_configured
+        else
+            logger -t usemode -p err "Failed to configure network mode"
+        fi
+    fi
+}
