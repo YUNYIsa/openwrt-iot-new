@@ -85,6 +85,14 @@ commit_network_config() {
     return 0
 }
 
+# 禁用VLAN并删除VLAN配置（单网口模式核心）
+disable_vlan() {
+    # 禁用VLAN（如果switch存在）
+    uci set network.@switch[0].enable_vlan=0 2>/dev/null
+    # 删除所有switch_vlan配置，防止eth0.x接口被创建
+    while uci delete network.@switch_vlan[0] 2>/dev/null; do :; done
+}
+
 # 核心模式配置
 case "$1" in
 # ============= 单网口WAN DHCP模式（默认推荐）=============
@@ -93,7 +101,7 @@ dhcpwan)
     backup_config
     # 单网口配置：禁用VLAN，WAN=eth0直接
     uci delete network.lan.ifname 2>/dev/null
-    uci set network.@switch[0].enable_vlan=0
+    disable_vlan
     uci set network.wan.ifname=eth0
     uci set network.wan6.ifname=eth0
     # WAN口DHCP自动获取（核心）
@@ -109,9 +117,9 @@ dhcpwan)
     fi
     # 单网口IoT设备模式寄存器操作
     init_iot_device_mode 1
-    # 软重启网络+放行88端口
-    ifdown lan 2>/dev/null
-    ifdown wan && ifup wan 2>/dev/null
+    # 完全重启网络以应用VLAN配置变更
+    /etc/init.d/network restart
+    # 放行88端口
     open_port88
     ;;
 # ============= 单网口WAN静态IP模式 =============
@@ -120,7 +128,7 @@ staticwan)
     backup_config
     # 单网口配置：禁用VLAN，WAN=eth0直接
     uci delete network.lan.ifname 2>/dev/null
-    uci set network.@switch[0].enable_vlan=0
+    disable_vlan
     uci set network.wan.ifname=eth0
     uci set network.wan6.ifname=eth0
     # WAN口静态IP（核心）
@@ -140,9 +148,9 @@ staticwan)
     fi
     # 单网口IoT设备模式寄存器操作
     init_iot_device_mode 1
-    # 软重启网络+放行88端口
-    ifdown lan 2>/dev/null
-    ifdown wan && ifup wan 2>/dev/null
+    # 完全重启网络以应用VLAN配置变更
+    /etc/init.d/network restart
+    # 放行88端口
     open_port88
     ;;
 # ============= 单网口LAN静态IP模式 =============
@@ -151,7 +159,7 @@ lanstatic)
     backup_config
     # 单网口配置：禁用VLAN，LAN=eth0
     uci set network.lan.ifname=eth0
-    uci set network.@switch[0].enable_vlan=0
+    disable_vlan
     uci delete network.wan.ifname 2>/dev/null
     uci delete network.wan6.ifname 2>/dev/null
     # LAN口静态IP（核心，电脑直访）
@@ -172,9 +180,8 @@ lanstatic)
     fi
     # 单网口IoT设备模式寄存器操作
     init_iot_device_mode 3
-    # 软重启网络
-    ifdown wan 2>/dev/null
-    ifdown lan && ifup lan 2>/dev/null
+    # 完全重启网络以应用VLAN配置变更
+    /etc/init.d/network restart
     ;;
 # ============= 备用命令：关闭88端口 =============
 closeport88)
